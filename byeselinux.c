@@ -7,7 +7,7 @@
 
 MODULE_AUTHOR("zxz0O0");
 MODULE_DESCRIPTION("Say bye to SELinux at boot time to allow dualrecovery");
-MODULE_VERSION("1.0");
+MODULE_VERSION("1.1");
 MODULE_LICENSE("GPL");
 
 void load_orig_module(void)
@@ -15,43 +15,107 @@ void load_orig_module(void)
 	char* envp[] = { NULL };
 	char* argv[] = { "/system/bin/sh", "-c", "/system/bin/insmod /system/lib/modules/mhl_sii8620_8061_drv_orig.ko", NULL };
 
-	pr_info("byeselinux: trying to load original module");
+	pr_info("byeselinux: trying to load original module\n");
 	call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
 }
 
 static bool (*_selinux_is_enabled)(void);
 unsigned long enabled;
 unsigned long enforcing;
-unsigned long* _selinux_enabled;
-unsigned long* _selinux_enforcing;
+unsigned long* _selinux_enabled = NULL;
+unsigned long* _selinux_enforcing = NULL;
+
+unsigned long findEnabled(void)
+{
+	int i = 0;
+	//0x1e,0xff,0x2f,0xe1 --> bx lr
+	const char asm_bx[] = { 0x1E, 0xFF, 0x2F, 0xE1 };
+	char* p = (char*)kallsyms_lookup_name("selinux_is_enabled");
+	for(i = 0; i < 64; i++)
+	{
+		if(memcmp(&p[i], asm_bx, 4) == 0)
+			return *(unsigned long*)&p[i+4];
+	}
+
+	return 0;
+}
+
+unsigned long findEnforcing(void)
+{
+	int i = 0;
+	//0xf0,0x80,0xbd,0xe8 --> LDMFD SP!, {R4-R7,PC}
+	const char asm_ldmfd[] = { 0xF0, 0x80, 0xBD, 0xE8 };
+	char* p = (char*)kallsyms_lookup_name("sel_read_enforce");
+	if(p == NULL)
+		return 0;
+	for(i = 0; i < 128; i++)
+	{
+		if(memcmp(&p[i], asm_ldmfd, 4) == 0)
+			return *(unsigned long*)&p[i+12];
+	}
+
+	return 0;
+}
 
 static int __init byeselinux_init(void)
 {
 	pr_info("byeselinux: module loaded\n");
 	_selinux_is_enabled = (void*)kallsyms_lookup_name("selinux_is_enabled");
+	if(_selinux_is_enabled == NULL)
+	{
+		pr_info("byeselinux: Error finding selinux_is_enabled\n");
+		return 1;
+	}
+
+	enabled = _selinux_is_enabled();
+	pr_info("byeselinux: old selinux_enabled %lu\n", enabled);
+
 	_selinux_enabled = (unsigned long*)kallsyms_lookup_name("selinux_enabled");
-	_selinux_enforcing = (unsigned long*)kallsyms_lookup_name("selinux_enforcing");
+	if(_selinux_enabled == NULL)
+	{
+		pr_info("byeselinux: Could not find selinux_enabled in kallsyms\n");
+		pr_info("byeselinux: Trying to find it in memory\n");
+		_selinux_enabled = (unsigned long*)findEnabled();
+		if(_selinux_enabled == NULL)
+		{
+			pr_info("byeselinux: Could not find selinux_enabled address\n");
+			return 1;
+		}
+	}
 
-	pr_info("byeselinux: old selinux_enabled %d\n", _selinux_is_enabled());
-	pr_info("byeselinux: old selinux_enforcing: %lu\n", *_selinux_enforcing);
-
-	enabled = *_selinux_enabled;
 	*_selinux_enabled = 0;
-	enforcing = *_selinux_enforcing;
-	*_selinux_enforcing = 0;
-
 	pr_info("byeselinux: current selinux_enabled %d\n", _selinux_is_enabled());
-	pr_info("byeselinux: current selinux_enforcing: %lu\n", *_selinux_enforcing);
+
+	_selinux_enforcing = (unsigned long*)kallsyms_lookup_name("selinux_enforcing");
+	if(_selinux_enforcing == NULL)
+	{
+		pr_info("byeselinux: Could not find selinux_enforcing in kallsyms\n");
+		pr_info("byeselinux: Trying to find it in memory\n");
+		_selinux_enforcing = (unsigned long*)findEnforcing();
+	}
+	if(_selinux_enforcing == NULL)
+		pr_info("byeselinux: can not find enforcing address\n");
+	else
+	{
+		enforcing = *_selinux_enforcing;
+		pr_info("byeselinux: old selinux_enforcing: %lu\n", enforcing);
+		*_selinux_enforcing = 0;
+		pr_info("byeselinux: current selinux_enforcing: %lu\n", *_selinux_enforcing);
+	}
 
 	load_orig_module();
-
+	
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	*_selinux_enabled = enabled;
-	*_selinux_enforcing = enforcing;
+	if(_selinux_enabled != NULL)
+		*_selinux_enabled = enabled;
+
+	if(_selinux_enforcing != NULL)
+		*_selinux_enforcing = enforcing;
+
 	pr_info("byeselinux: module unloaded\n");
 }
 
