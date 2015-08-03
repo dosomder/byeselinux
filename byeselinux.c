@@ -10,6 +10,7 @@ MODULE_DESCRIPTION("Say bye to SELinux at boot time to allow dualrecovery");
 MODULE_VERSION("1.1");
 MODULE_LICENSE("GPL");
 
+#ifdef REPLACE_MODULE
 void load_orig_module(void)
 {
 	char* envp[] = { NULL };
@@ -18,6 +19,7 @@ void load_orig_module(void)
 	pr_info("byeselinux: trying to load original module\n");
 	call_usermodehelper(argv[0], argv, envp, UMH_WAIT_EXEC);
 }
+#endif
 
 static bool (*_selinux_is_enabled)(void);
 unsigned long enabled;
@@ -103,7 +105,9 @@ static int __init byeselinux_init(void)
 		pr_info("byeselinux: current selinux_enforcing: %lu\n", *_selinux_enforcing);
 	}
 
+#ifdef REPLACE_MODULE
 	load_orig_module();
+#endif
 	
 	return 0;
 }
