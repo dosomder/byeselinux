@@ -29,6 +29,7 @@ unsigned int* _selinux_enforcing = NULL;
 
 unsigned int* findEnabled(void)
 {
+#if !defined(__LP64__) || !__LP64__
 	int i = 0;
 	//0x1e,0xff,0x2f,0xe1 --> bx lr
 	const char asm_bx[] = { 0x1E, 0xFF, 0x2F, 0xE1 };
@@ -38,12 +39,14 @@ unsigned int* findEnabled(void)
 		if(memcmp(&p[i], asm_bx, 4) == 0)
 			return *(unsigned int**)&p[i+4];
 	}
+#endif
 
 	return 0;
 }
 
 unsigned int* findEnforcing(void)
 {
+#if !defined(__LP64__) || !__LP64__
 	int i = 0;
 	//0xf0,0x80,0xbd,0xe8 --> LDMFD SP!, {R4-R7,PC}
 	const char asm_ldmfd[] = { 0xF0, 0x80, 0xBD, 0xE8 };
@@ -55,6 +58,7 @@ unsigned int* findEnforcing(void)
 		if(memcmp(&p[i], asm_ldmfd, 4) == 0)
 			return *(unsigned int**)&p[i+12];
 	}
+#endif
 
 	return 0;
 }
