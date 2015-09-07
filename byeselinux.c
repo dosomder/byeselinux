@@ -22,12 +22,12 @@ void load_orig_module(void)
 #endif
 
 static bool (*_selinux_is_enabled)(void);
-unsigned long enabled;
-unsigned long enforcing;
-unsigned long* _selinux_enabled = NULL;
-unsigned long* _selinux_enforcing = NULL;
+unsigned int enabled;
+unsigned int enforcing;
+unsigned int* _selinux_enabled = NULL;
+unsigned int* _selinux_enforcing = NULL;
 
-unsigned long findEnabled(void)
+unsigned int* findEnabled(void)
 {
 	int i = 0;
 	//0x1e,0xff,0x2f,0xe1 --> bx lr
@@ -36,13 +36,13 @@ unsigned long findEnabled(void)
 	for(i = 0; i < 64; i++)
 	{
 		if(memcmp(&p[i], asm_bx, 4) == 0)
-			return *(unsigned long*)&p[i+4];
+			return *(unsigned int**)&p[i+4];
 	}
 
 	return 0;
 }
 
-unsigned long findEnforcing(void)
+unsigned int* findEnforcing(void)
 {
 	int i = 0;
 	//0xf0,0x80,0xbd,0xe8 --> LDMFD SP!, {R4-R7,PC}
@@ -53,7 +53,7 @@ unsigned long findEnforcing(void)
 	for(i = 0; i < 128; i++)
 	{
 		if(memcmp(&p[i], asm_ldmfd, 4) == 0)
-			return *(unsigned long*)&p[i+12];
+			return *(unsigned int**)&p[i+12];
 	}
 
 	return 0;
@@ -70,14 +70,14 @@ static int __init byeselinux_init(void)
 	}
 
 	enabled = _selinux_is_enabled();
-	pr_info("byeselinux: old selinux_enabled %lu\n", enabled);
+	pr_info("byeselinux: old selinux_enabled %u\n", enabled);
 
-	_selinux_enabled = (unsigned long*)kallsyms_lookup_name("selinux_enabled");
+	_selinux_enabled = (unsigned int*)kallsyms_lookup_name("selinux_enabled");
 	if(_selinux_enabled == NULL)
 	{
 		pr_info("byeselinux: Could not find selinux_enabled in kallsyms\n");
 		pr_info("byeselinux: Trying to find it in memory\n");
-		_selinux_enabled = (unsigned long*)findEnabled();
+		_selinux_enabled = findEnabled();
 		if(_selinux_enabled == NULL)
 		{
 			pr_info("byeselinux: Could not find selinux_enabled address\n");
@@ -86,23 +86,23 @@ static int __init byeselinux_init(void)
 	}
 
 	*_selinux_enabled = 0;
-	pr_info("byeselinux: current selinux_enabled %d\n", _selinux_is_enabled());
+	pr_info("byeselinux: current selinux_enabled %u\n", _selinux_is_enabled());
 
-	_selinux_enforcing = (unsigned long*)kallsyms_lookup_name("selinux_enforcing");
+	_selinux_enforcing = (unsigned int*)kallsyms_lookup_name("selinux_enforcing");
 	if(_selinux_enforcing == NULL)
 	{
 		pr_info("byeselinux: Could not find selinux_enforcing in kallsyms\n");
 		pr_info("byeselinux: Trying to find it in memory\n");
-		_selinux_enforcing = (unsigned long*)findEnforcing();
+		_selinux_enforcing = findEnforcing();
 	}
 	if(_selinux_enforcing == NULL)
 		pr_info("byeselinux: can not find enforcing address\n");
 	else
 	{
 		enforcing = *_selinux_enforcing;
-		pr_info("byeselinux: old selinux_enforcing: %lu\n", enforcing);
+		pr_info("byeselinux: old selinux_enforcing: %u\n", enforcing);
 		*_selinux_enforcing = 0;
-		pr_info("byeselinux: current selinux_enforcing: %lu\n", *_selinux_enforcing);
+		pr_info("byeselinux: current selinux_enforcing: %u\n", *_selinux_enforcing);
 	}
 
 #ifdef REPLACE_MODULE
