@@ -41,7 +41,7 @@ unsigned int* findEnabled(void)
 	}
 #endif
 
-	return 0;
+	return NULL;
 }
 
 unsigned int* findEnforcing(void)
@@ -60,7 +60,7 @@ unsigned int* findEnforcing(void)
 	}
 #endif
 
-	return 0;
+	return NULL;
 }
 
 static int __init byeselinux_init(void)
